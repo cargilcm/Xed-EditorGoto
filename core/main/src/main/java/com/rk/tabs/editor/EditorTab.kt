@@ -528,8 +528,8 @@ open class EditorTab(
                             
                             val column = parts.getOrNull(1)
                                 ?.toInt()
-                                ?.coerceIn(1, maxColumn)
-                                ?: 1
+                                ?.coerceIn(0, maxColumn) // Allow 0 for empty lines
+                                ?: 0
                             
                             editor.setSelection(line, column)
                         },
