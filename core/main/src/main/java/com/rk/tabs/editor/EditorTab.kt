@@ -526,7 +526,7 @@ open class EditorTab(
                             val line = parts[0].toInt() - 1
                             val maxColumn = editor.text.getLine(line).length
                             
-                            val column = parts.getOrNull(1).coerceAtLeast(0)
+                            val column = parts.getOrNull(1)
                                 ?.toInt()
                                 ?.coerceIn(1, maxColumn)
                                 ?: 1
