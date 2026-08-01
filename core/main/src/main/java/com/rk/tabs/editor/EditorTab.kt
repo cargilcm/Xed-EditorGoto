@@ -522,11 +522,16 @@ open class EditorTab(
                         onConfirm = {
                             val editor = editorState.editor.get() ?: return@SingleInputDialog
                             val parts = editorState.jumpToLineValue.split(":")
-
+                            
                             val line = parts[0].toInt() - 1
-                            val maxColumn = editor.text.getLine(line).length - 1
-                            val column = parts.getOrNull(1)?.toInt()?.minus(1)?.coerceIn(0, maxColumn) ?: 0
-
+                            val maxColumn = (editor.text.getLine(line).length - 1).coerceAtLeast(0)
+                            
+                            val column = parts.getOrNull(1)
+                                ?.toInt()
+                                ?.minus(1)
+                                ?.coerceIn(0, maxColumn)
+                                ?: 0
+                            
                             editor.setSelection(line, column)
                         },
                         onFinish = {
