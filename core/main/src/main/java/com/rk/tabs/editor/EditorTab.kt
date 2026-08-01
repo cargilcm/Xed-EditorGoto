@@ -524,13 +524,12 @@ open class EditorTab(
                             val parts = editorState.jumpToLineValue.split(":")
                             
                             val line = parts[0].toInt() - 1
-                            val maxColumn = (editor.text.getLine(line).length - 1).coerceAtLeast(0)
+                            val maxColumn = editor.text.getLine(line).length
                             
                             val column = parts.getOrNull(1)
                                 ?.toInt()
-                                ?.minus(1)
-                                ?.coerceIn(0, maxColumn)
-                                ?: 0
+                                ?.coerceIn(1, maxColumn)
+                                ?: 1
                             
                             editor.setSelection(line, column)
                         },
