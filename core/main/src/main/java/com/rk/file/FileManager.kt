@@ -56,13 +56,7 @@ class FileManager(private val activity: ComponentActivity) {
      * Helper to resolve whether to use SAF (ACTION_OPEN_DOCUMENT) 
      * or fallback chooser (ACTION_GET_CONTENT) for File Manager+.
      */
-
     private fun getBestPickerIntent(context: Context, mimeType: String): Intent {
-        val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = mimeType
-        }
-    
         val fileManagerPlusPackage = "com.alphainventor.filemanager"
         val isFileManagerInstalled = try {
             context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
@@ -72,20 +66,22 @@ class FileManager(private val activity: ComponentActivity) {
         }
     
         return if (isFileManagerInstalled) {
-            // Base intent targeting ACTION_GET_CONTENT specifically ensures apps like File Manager+ get queried
+            // Broad intent that forces Android's bottom app chooser dialog
             val getContentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*" // Use generic wildcard so File Manager+ accepts all file extensions
+                type = "*/*" // Use wildcard so File Manager+ isn't filtered out
             }
-    
-            Intent.createChooser(getContentIntent, "Select File").apply {
-                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(safIntent))
-            }
+            
+            // DO NOT attach ACTION_OPEN_DOCUMENT to EXTRA_INITIAL_INTENTS
+            Intent.createChooser(getContentIntent, "Select File with")
         } else {
-            safIntent
+            // Fallback to SAF if File Manager+ isn't installed
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mimeType
+            }
         }
     }
-
     fun requestOpenFile(mimeType: String = "*/*", callback: (Uri?) -> Unit) {
         val intent = getBestPickerIntent(activity, mimeType)
         launchActivityForResult(intent) { result ->
