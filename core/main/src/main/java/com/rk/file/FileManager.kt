@@ -56,12 +56,13 @@ class FileManager(private val activity: ComponentActivity) {
      * Helper to resolve whether to use SAF (ACTION_OPEN_DOCUMENT) 
      * or fallback chooser (ACTION_GET_CONTENT) for File Manager+.
      */
+
     private fun getBestPickerIntent(context: Context, mimeType: String): Intent {
         val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = mimeType
         }
-
+    
         val fileManagerPlusPackage = "com.alphainventor.filemanager"
         val isFileManagerInstalled = try {
             context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
@@ -69,13 +70,15 @@ class FileManager(private val activity: ComponentActivity) {
         } catch (e: Exception) {
             false
         }
-
+    
         return if (isFileManagerInstalled) {
-            val fallbackIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            // Base intent targeting ACTION_GET_CONTENT specifically ensures apps like File Manager+ get queried
+            val getContentIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                type = mimeType
+                type = "*/*" // Use generic wildcard so File Manager+ accepts all file extensions
             }
-            Intent.createChooser(fallbackIntent, "Select File").apply {
+    
+            Intent.createChooser(getContentIntent, "Select File").apply {
                 putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(safIntent))
             }
         } else {
