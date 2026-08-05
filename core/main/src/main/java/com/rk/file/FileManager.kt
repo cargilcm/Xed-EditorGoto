@@ -54,19 +54,19 @@ class FileManager(private val activity: ComponentActivity) {
     }
 
     fun requestOpenFile(mimeType: String = "*/*", callback: (Uri?) -> Unit) {
-        Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = mimeType
-            launchActivityForResult(this) { result ->
-                if (result.resultCode == Activity.RESULT_OK) {
-                    callback(result.data?.data)
-                } else {
-                    callback(null)
-                }
-            }
-        }
-    }
+	    val targetIntent = getBestPickerIntent(activity, mimeType)
+	    
+	    // Wrap in createChooser to ensure all supporting apps (including File Manager+) appear
+	    val chooserIntent = Intent.createChooser(targetIntent, "Select File")
 
+	    launchActivityForResult(chooserIntent) { result ->
+	        if (result.resultCode == Activity.RESULT_OK) {
+	            callback(result.data?.data)
+	        } else {
+	            callback(null)
+	        }
+	    }
+	}
     fun requestOpenDirectory(callback: (Uri?) -> Unit) {
         launchDirectoryPicker { uri ->
             uri?.let {
@@ -102,50 +102,47 @@ class FileManager(private val activity: ComponentActivity) {
 
     var parentFile: FileObject? = null
 
-    fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
-        parentFile = parent
-        launchActivityForResult(
-            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "*/*"
-            }
-        ) { result ->
-            if (result.resultCode != Activity.RESULT_OK) {
-                callback(null)
-                parentFile = null
-                return@launchActivityForResult
-            }
+fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
+	    parentFile = parent
 
-            val sourceUri =
-                result.data?.data
-                    ?: run {
-                        callback(null)
-                        parentFile = null
-                        return@launchActivityForResult
-                    }
+	    val targetIntent = getBestPickerIntent(activity, "*/*")
+	    val chooserIntent = Intent.createChooser(targetIntent, "Select File to Add")
 
-            DefaultScope.launch(Dispatchers.IO) {
-                try {
-                    val fileName = getFileName(activity.contentResolver, sourceUri)
-                    val destinationFile = parentFile?.createChild(true, fileName)
+	    launchActivityForResult(chooserIntent) { result ->
+	        if (result.resultCode != Activity.RESULT_OK) {
+	            callback(null)
+	            parentFile = null
+	            return@launchActivityForResult
+	        }
 
-                    destinationFile?.let { file ->
-                        copyUriData(activity.contentResolver, sourceUri, file.toUri())
-                        withContext(Dispatchers.Main) {
-                            fileTreeViewModel.get()?.updateCache(parentFile!!)
-                            callback(file)
-                        }
-                    } ?: run { withContext(Dispatchers.Main) { callback(null) } }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    withContext(Dispatchers.Main) { callback(null) }
-                } finally {
-                    parentFile = null
-                }
-            }
-        }
-    }
+	        val sourceUri = result.data?.data
+	            ?: run {
+	                callback(null)
+	                parentFile = null
+	                return@launchActivityForResult
+	            }
 
+	        DefaultScope.launch(Dispatchers.IO) {
+	            try {
+	                val fileName = getFileName(activity.contentResolver, sourceUri)
+	                val destinationFile = parentFile?.createChild(true, fileName)
+
+	                destinationFile?.let { file ->
+	                    copyUriData(activity.contentResolver, sourceUri, file.toUri())
+	                    withContext(Dispatchers.Main) {
+	                        fileTreeViewModel.get()?.updateCache(parentFile!!)
+	                        callback(file)
+	                    }
+	                } ?: run { withContext(Dispatchers.Main) { callback(null) } }
+	            } catch (e: Exception) {
+	                e.printStackTrace()
+	                withContext(Dispatchers.Main) { callback(null) }
+	            } finally {
+	                parentFile = null
+	            }
+	        }
+	    }
+	}
     fun selectDirForNewFileLaunch(fileName: String, callback: (FileObject?) -> Unit = {}) {
         launchDirectoryPicker { uri ->
             if (uri == null) {
@@ -242,5 +239,36 @@ class FileManager(private val activity: ComponentActivity) {
                 copyStream(inputStream, outputStream)
             }
         } ?: throw RuntimeException("Failed to copy data from $sourceUri to $destinationUri")
+    }
+    private fun getBestPickerIntent(context: Context, mimeType: String): Intent {
+        val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+        }
+    
+        // Check how many activities handle ACTION_OPEN_DOCUMENT
+        val safResolves = context.packageManager.queryIntentActivities(
+            safIntent,
+            PackageManager.MATCH_DEFAULT_ONLY
+        )
+    
+        // Check if a specific package (like File Manager+) exists and handles GET_CONTENT instead
+        val fileManagerPlusPackage = "com.alphainventor.filemanager" // File Manager+ package name
+        val isFileManagerInstalled = try {
+            context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    
+        // Fall back to ACTION_GET_CONTENT wrapped in a chooser if needed
+        return if (isFileManagerInstalled) {
+            Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mimeType
+            }
+        } else {
+            safIntent
+        }
     }
 }
