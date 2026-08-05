@@ -35,6 +35,8 @@ import com.rk.file.FileObject
 import com.rk.file.FileWrapper
 import com.rk.icons.Icon
 import com.rk.project.ProjectCreatorActivity
+import com.rk.file.toFileObject
+
 import com.rk.project.ProjectTemplateRegistry
 import com.rk.resources.drawables
 import com.rk.resources.strings
