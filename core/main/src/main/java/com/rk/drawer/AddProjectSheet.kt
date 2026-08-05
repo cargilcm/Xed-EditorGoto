@@ -79,19 +79,22 @@ fun AddProjectSheet(
                 },
             )
 			AddDialogItem(
-                icon = Icon.ResourceIcon(drawables.file), // Or any valid file icon drawable resource
-                title = "Open file (External App)",
-                description = "Pick a file using File Manager+ or external pickers",
-                onClick = {
-                    onDismiss()
-                    activity.fileManager.requestOpenFile("*/*") { uri ->
-                        uri?.let { safeUri ->
-                            // Open the selected file in Xed
-                            activity.adapter?.addFile(safeUri)
-                        }
-                    }
-                },
-            )
+                            icon = Icon.ResourceIcon(drawables.file),
+                            title = "Open file (External App)",
+                            description = "Pick a file using File Manager+ or external pickers",
+                            onClick = {
+                                onDismiss()
+                                activity.fileManager.requestOpenFile("*/*") { uri ->
+                                    uri?.let { safeUri ->
+                                        lifecycleScope.launch {
+                                            // Convert Uri to FileObject and add it to the drawer/editor tabs
+                                            val fileObject = safeUri.toFileObject(expectedIsFile = true)
+                                            viewModel.addFileTreeTab(fileObject)
+                                        }
+                                    }
+                                }
+                            },
+                        )
             val is11Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val isManager = is11Plus && Environment.isExternalStorageManager()
             val legacyPermission =
