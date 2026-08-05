@@ -81,22 +81,45 @@ fun AddProjectSheet(
                 },
             )
 			AddDialogItem(
-                            icon = Icon.ResourceIcon(drawables.file),
-                            title = "Open file (External App)",
-                            description = "Pick a file using File Manager+ or external pickers",
-                            onClick = {
-                                onDismiss()
-                                activity.fileManager.requestOpenFile("*/*") { uri ->
-                                    uri?.let { safeUri ->
-                                        lifecycleScope.launch {
-                                            // Convert Uri to FileObject and add it to the drawer/editor tabs
-                                            val fileObject = safeUri.toFileObject(expectedIsFile = true)
-                                            viewModel.addFileTreeTab(fileObject)
+                icon = Icon.ResourceIcon(drawables.file),
+                title = "Open file (External App)",
+                description = "Pick a file using File Manager+ or external pickers",
+                onClick = {
+                    onDismiss()
+                    activity.fileManager.requestOpenFile("*/*") { uri ->
+                        uri?.let { safeUri ->
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                try {
+                                    // 1. Try resolving via standard FileObject/UriFile wrapper
+                                    val fileObject = safeUri.toFileObject(expectedIsFile = true)
+                                    
+                                    withContext(Dispatchers.Main) {
+                                        viewModel.addFileTreeTab(fileObject)
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    
+                                    // 2. Fallback: If File Manager+ returns a raw Uri stream that toFileObject fails on,
+                                    // read the ContentResolver input stream directly into Xed's tab editor.
+                                    val content = activity.contentResolver.openInputStream(safeUri)?.use { stream ->
+                                        stream.bufferedReader().readText()
+                                    }
+                                    
+                                    withContext(Dispatchers.Main) {
+                                        if (content != null) {
+                                            // Open as an in-memory/temp tab inside Xed's editor
+                                            viewModel.openUnsavedTab(
+                                                title = safeUri.lastPathSegment ?: "External File",
+                                                content = content
+                                            )
                                         }
                                     }
                                 }
-                            },
-                        )
+                            }
+                        }
+                    }
+                },
+            )
             val is11Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val isManager = is11Plus && Environment.isExternalStorageManager()
             val legacyPermission =
