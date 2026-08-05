@@ -1,5 +1,6 @@
 package com.rk.file
 
+import android.content.Context
 import android.app.Activity
 import android.content.ContentResolver
 import android.content.Intent
@@ -241,34 +242,26 @@ fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
         } ?: throw RuntimeException("Failed to copy data from $sourceUri to $destinationUri")
     }
     private fun getBestPickerIntent(context: Context, mimeType: String): Intent {
-        val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+    val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = mimeType
+    }
+
+    val fileManagerPlusPackage = "com.alphainventor.filemanager"
+    val isFileManagerInstalled = try {
+        // Fix: Use context.packageManager instead of unresolved packageManager
+        context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    return if (isFileManagerInstalled) {
+        Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = mimeType
         }
-    
-        // Check how many activities handle ACTION_OPEN_DOCUMENT
-        val safResolves = context.packageManager.queryIntentActivities(
-            safIntent,
-            PackageManager.MATCH_DEFAULT_ONLY
-        )
-    
-        // Check if a specific package (like File Manager+) exists and handles GET_CONTENT instead
-        val fileManagerPlusPackage = "com.alphainventor.filemanager" // File Manager+ package name
-        val isFileManagerInstalled = try {
-            context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
-    
-        // Fall back to ACTION_GET_CONTENT wrapped in a chooser if needed
-        return if (isFileManagerInstalled) {
-            Intent(Intent.ACTION_GET_CONTENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = mimeType
-            }
-        } else {
-            safIntent
-        }
+    } else {
+        safIntent
     }
-}
+}}
