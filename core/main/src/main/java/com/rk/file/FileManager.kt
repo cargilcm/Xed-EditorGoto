@@ -1,8 +1,8 @@
 package com.rk.file
 
-import android.content.Context
 import android.app.Activity
 import android.content.ContentResolver
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -28,7 +28,6 @@ class FileManager(private val activity: ComponentActivity) {
 
     private fun getString(@StringRes id: Int): String = id.getString()
 
-    // Generic activity result handler
     private val activityResultLauncher =
         activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             activityResultCallback?.invoke(result)
@@ -36,7 +35,6 @@ class FileManager(private val activity: ComponentActivity) {
         }
     private var activityResultCallback: ((ActivityResult) -> Unit)? = null
 
-    // Generic directory picker
     private val directoryPickerLauncher =
         activity.registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
             directoryPickerCallback?.invoke(uri)
@@ -54,96 +52,146 @@ class FileManager(private val activity: ComponentActivity) {
         directoryPickerLauncher.launch(null)
     }
 
-    fun requestOpenFile(mimeType: String = "*/*", callback: (Uri?) -> Unit) {
-	    val targetIntent = getBestPickerIntent(activity, mimeType)
-	    
-	    // Wrap in createChooser to ensure all supporting apps (including File Manager+) appear
-	    val chooserIntent = Intent.createChooser(targetIntent, "Select File")
+    /**
+     * Helper to resolve whether to use SAF (ACTION_OPEN_DOCUMENT) 
+     * or fallback chooser (ACTION_GET_CONTENT) for File Manager+.
+     */
+    private fun getBestPickerIntent(context: Context, mimeType: String): Intent {
+        val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+        }
 
-	    launchActivityForResult(chooserIntent) { result ->
-	        if (result.resultCode == Activity.RESULT_OK) {
-	            callback(result.data?.data)
-	        } else {
-	            callback(null)
-	        }
-	    }
-	}
-    fun requestOpenDirectory(callback: (Uri?) -> Unit) {
-        launchDirectoryPicker { uri ->
-            uri?.let {
-                runCatching {
-                    val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    activity.contentResolver.takePersistableUriPermission(it, takeFlags)
-                }
-                    .onFailure { e -> e.printStackTrace() }
+        val fileManagerPlusPackage = "com.alphainventor.filemanager"
+        val isFileManagerInstalled = try {
+            context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+
+        return if (isFileManagerInstalled) {
+            val fallbackIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mimeType
             }
-            callback(uri)
+            Intent.createChooser(fallbackIntent, "Select File").apply {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(safIntent))
+            }
+        } else {
+            safIntent
         }
     }
 
-    fun createNewFile(mimeType: String, title: String, callback: (FileObject?) -> Unit = {}) {
-        launchActivityForResult(
-            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                type = mimeType
-                putExtra(Intent.EXTRA_TITLE, title)
-            }
-        ) { result ->
+    fun requestOpenFile(mimeType: String = "*/*", callback: (Uri?) -> Unit) {
+        val intent = getBestPickerIntent(activity, mimeType)
+        launchActivityForResult(intent) { result ->
             if (result.resultCode == Activity.RESULT_OK) {
-                this.activity.lifecycleScope.launch {
-                    val uri = result.data?.data
-
-                    val fileObject = uri?.toFileObject(expectedIsFile = true)
-                    callback(fileObject)
-                }
+                val uri = result.data?.data
+                uri?.let { safeTakePersistableUriPermission(it) }
+                callback(uri)
             } else {
                 callback(null)
             }
         }
     }
 
+    fun requestOpenDirectory(callback: (Uri?) -> Unit) {
+        val fileManagerPlusPackage = "com.alphainventor.filemanager"
+        val isFileManagerInstalled = try {
+            activity.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+
+        if (isFileManagerInstalled) {
+            val treeIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+            val folderIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "resource/folder"
+            }
+            val chooserIntent = Intent.createChooser(folderIntent, "Select Folder").apply {
+                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(treeIntent))
+            }
+            launchActivityForResult(chooserIntent) { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val uri = result.data?.data
+                    uri?.let { safeTakePersistableUriPermission(it) }
+                    callback(uri)
+                } else {
+                    callback(null)
+                }
+            }
+        } else {
+            launchDirectoryPicker { uri ->
+                uri?.let { safeTakePersistableUriPermission(it) }
+                callback(uri)
+            }
+        }
+    }
+
     var parentFile: FileObject? = null
 
-fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
-	    parentFile = parent
+    fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
+        parentFile = parent
+        val intent = getBestPickerIntent(activity, "*/*")
 
-	    val targetIntent = getBestPickerIntent(activity, "*/*")
-	    val chooserIntent = Intent.createChooser(targetIntent, "Select File to Add")
+        launchActivityForResult(intent) { result ->
+            if (result.resultCode != Activity.RESULT_OK) {
+                callback(null)
+                parentFile = null
+                return@launchActivityForResult
+            }
 
-	    launchActivityForResult(chooserIntent) { result ->
-	        if (result.resultCode != Activity.RESULT_OK) {
-	            callback(null)
-	            parentFile = null
-	            return@launchActivityForResult
-	        }
+            val sourceUri = result.data?.data
+                ?: run {
+                    callback(null)
+                    parentFile = null
+                    return@launchActivityForResult
+                }
 
-	        val sourceUri = result.data?.data
-	            ?: run {
-	                callback(null)
-	                parentFile = null
-	                return@launchActivityForResult
-	            }
+            // Standard GET_CONTENT URIs won't yield persistable permissions,
+            // but we call this safely anyway just in case it is a SAF URI.
+            safeTakePersistableUriPermission(sourceUri)
 
-	        DefaultScope.launch(Dispatchers.IO) {
-	            try {
-	                val fileName = getFileName(activity.contentResolver, sourceUri)
-	                val destinationFile = parentFile?.createChild(true, fileName)
+            DefaultScope.launch(Dispatchers.IO) {
+                try {
+                    val fileName = getFileName(activity.contentResolver, sourceUri)
+                    val destinationFile = parentFile?.createChild(true, fileName)
 
-	                destinationFile?.let { file ->
-	                    copyUriData(activity.contentResolver, sourceUri, file.toUri())
-	                    withContext(Dispatchers.Main) {
-	                        fileTreeViewModel.get()?.updateCache(parentFile!!)
-	                        callback(file)
-	                    }
-	                } ?: run { withContext(Dispatchers.Main) { callback(null) } }
-	            } catch (e: Exception) {
-	                e.printStackTrace()
-	                withContext(Dispatchers.Main) { callback(null) }
-	            } finally {
-	                parentFile = null
-	            }
-	        }
-	    }
-	}
+                    destinationFile?.let { file ->
+                        copyUriData(activity.contentResolver, sourceUri, file.toUri())
+                        withContext(Dispatchers.Main) {
+                            fileTreeViewModel.get()?.updateCache(parentFile!!)
+                            callback(file)
+                        }
+                    } ?: run { withContext(Dispatchers.Main) { callback(null) } }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    withContext(Dispatchers.Main) { callback(null) }
+                } finally {
+                    parentFile = null
+                }
+            }
+        }
+    }
+
+    /**
+     * Safely attempts to take persistable URI permissions without throwing 
+     * a SecurityException when non-SAF targets (like File Manager+) are used.
+     */
+    private fun safeTakePersistableUriPermission(uri: Uri) {
+        runCatching {
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            activity.contentResolver.takePersistableUriPermission(uri, takeFlags)
+        }.onFailure { e ->
+            // Non-SAF apps (e.g. File Manager+) return standard content URIs that don't support persistable flags.
+            // Catching SecurityException/IllegalArgumentException here prevents crashes.
+            e.printStackTrace()
+        }
+    }
+
     fun selectDirForNewFileLaunch(fileName: String, callback: (FileObject?) -> Unit = {}) {
         launchDirectoryPicker { uri ->
             if (uri == null) {
@@ -164,6 +212,25 @@ fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                callback(null)
+            }
+        }
+    }
+
+    fun createNewFile(mimeType: String, title: String, callback: (FileObject?) -> Unit = {}) {
+        launchActivityForResult(
+            Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_TITLE, title)
+            }
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                this.activity.lifecycleScope.launch {
+                    val uri = result.data?.data
+                    val fileObject = uri?.toFileObject(expectedIsFile = true)
+                    callback(fileObject)
+                }
+            } else {
                 callback(null)
             }
         }
@@ -241,27 +308,4 @@ fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
             }
         } ?: throw RuntimeException("Failed to copy data from $sourceUri to $destinationUri")
     }
-    private fun getBestPickerIntent(context: Context, mimeType: String): Intent {
-    val safIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-        addCategory(Intent.CATEGORY_OPENABLE)
-        type = mimeType
-    }
-
-    val fileManagerPlusPackage = "com.alphainventor.filemanager"
-    val isFileManagerInstalled = try {
-        // Fix: Use context.packageManager instead of unresolved packageManager
-        context.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
-        true
-    } catch (e: Exception) {
-        false
-    }
-
-    return if (isFileManagerInstalled) {
-        Intent(Intent.ACTION_GET_CONTENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = mimeType
-        }
-    } else {
-        safIntent
-    }
-}}
+}
