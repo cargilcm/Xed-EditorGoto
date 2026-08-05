@@ -96,40 +96,45 @@ class FileManager(private val activity: ComponentActivity) {
     }
 
     fun requestOpenDirectory(callback: (Uri?) -> Unit) {
-        val fileManagerPlusPackage = "com.alphainventor.filemanager"
-        val isFileManagerInstalled = try {
-            activity.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
-            true
-        } catch (e: Exception) {
-            false
-        }
+	    val fileManagerPlusPackage = "com.alphainventor.filemanager"
+	    val isFileManagerInstalled = try {
+	        activity.packageManager.getPackageInfo(fileManagerPlusPackage, 0)
+	        true
+	    } catch (e: Exception) {
+	        false
+	    }
 
-        if (isFileManagerInstalled) {
-            val treeIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-            val folderIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "resource/folder"
-            }
-            val chooserIntent = Intent.createChooser(folderIntent, "Select Folder").apply {
-                putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(treeIntent))
-            }
-            launchActivityForResult(chooserIntent) { result ->
-                if (result.resultCode == Activity.RESULT_OK) {
-                    val uri = result.data?.data
-                    uri?.let { safeTakePersistableUriPermission(it) }
-                    callback(uri)
-                } else {
-                    callback(null)
-                }
-            }
-        } else {
-            launchDirectoryPicker { uri ->
-                uri?.let { safeTakePersistableUriPermission(it) }
-                callback(uri)
-            }
-        }
-    }
+	    if (isFileManagerInstalled) {
+	        // Broad folder picker intent that allows File Manager+ to handle the request
+	        val folderIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+	            addCategory(Intent.CATEGORY_OPENABLE)
+	            type = "resource/folder"
+	        }
+	        
+	        // SAF directory picker as fallback option
+	        val treeIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
 
+	        val chooserIntent = Intent.createChooser(folderIntent, "Select Directory").apply {
+	            putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(treeIntent))
+	        }
+
+	        launchActivityForResult(chooserIntent) { result ->
+	            if (result.resultCode == Activity.RESULT_OK) {
+	                val uri = result.data?.data
+	                uri?.let { safeTakePersistableUriPermission(it) }
+	                callback(uri)
+	            } else {
+	                callback(null)
+	            }
+	        }
+	    } else {
+	        // Standard SAF tree picker
+	        launchDirectoryPicker { uri ->
+	            uri?.let { safeTakePersistableUriPermission(it) }
+	            callback(uri)
+	        }
+	    }
+	}
     var parentFile: FileObject? = null
 
     fun requestAddFile(parent: FileObject, callback: (FileObject?) -> Unit = {}) {
