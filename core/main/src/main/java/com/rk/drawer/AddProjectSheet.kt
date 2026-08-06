@@ -63,34 +63,37 @@ fun AddProjectSheet(
 
     // Safely captures the Uri from external pickers like File Manager+ across activity lifecycle pauses
     val openFileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val uri = result.data?.data
-            if (uri == null) {
-                Toast.makeText(context, "No file URI received", Toast.LENGTH_SHORT).show()
-                return@rememberLauncherForActivityResult
-            }
-
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    val fileObject = uri.toFileObject(expectedIsFile = true)
-                    withContext(Dispatchers.Main) {
-                        onAddProject(fileObject)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            context,
-                            "Failed to open file: ${e.localizedMessage}",
-                            Toast.LENGTH_LONG
-                        ).show()
+            contract = ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            // Dismiss the sheet NOW after the file picker returns
+            onDismiss()
+    
+            if (result.resultCode == Activity.RESULT_OK) {
+                val uri = result.data?.data
+                if (uri == null) {
+                    Toast.makeText(context, "No file URI received", Toast.LENGTH_SHORT).show()
+                    return@rememberLauncherForActivityResult
+                }
+    
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        val fileObject = uri.toFileObject(expectedIsFile = true)
+                        withContext(Dispatchers.Main) {
+                            onAddProject(fileObject)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                context,
+                                "Failed to open file: ${e.localizedMessage}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                 }
             }
         }
-    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
