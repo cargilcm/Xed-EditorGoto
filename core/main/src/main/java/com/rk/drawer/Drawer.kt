@@ -1,5 +1,6 @@
 package com.rk.drawer
 
+import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,13 +60,6 @@ import com.rk.resources.strings
 import com.rk.utils.dialogRes
 import kotlinx.coroutines.launch
 
-private fun validateValue(value: String): String? {
-    return when {
-        value.isBlank() -> strings.value_empty_err.getString()
-        else -> null
-    }
-}
-
 @Composable
 fun DrawerContent(fullscreen: Boolean) {
     val context = LocalContext.current
@@ -80,15 +74,35 @@ fun DrawerContent(fullscreen: Boolean) {
             onResult = { uri ->
                 uri?.let {
                     runCatching {
-                        // Persist access permissions (required for Android 5.0+)
                         context.contentResolver.takePersistableUriPermission(
                             it,
                             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
                         )
-                    }
-                        .onFailure { it.printStackTrace() }
+                    }.onFailure { e -> e.printStackTrace() }
 
                     scope.launch { viewModel.addFileTreeTab(it.toFileObject(expectedIsFile = false)) }
+                }
+            },
+        )
+
+    val openExternalFile =
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult(),
+            onResult = { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val uri = result.data?.data
+                    uri?.let { safeUri ->
+                        runCatching {
+                            context.contentResolver.takePersistableUriPermission(
+                                safeUri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                            )
+                        }.onFailure { e -> e.printStackTrace() }
+
+                        scope.launch {
+                            viewModel.addFileTreeTab(safeUri.toFileObject(expectedIsFile = true), true)
+                        }
+                    }
                 }
             },
         )
@@ -98,7 +112,6 @@ fun DrawerContent(fullscreen: Boolean) {
             CircularProgressIndicator()
         } else {
             Row(horizontalArrangement = Arrangement.Start, modifier = Modifier.fillMaxSize()) {
-                val scope = rememberCoroutineScope()
                 var showAddDialog by rememberSaveable { mutableStateOf(false) }
                 var closeProjectDialog by remember { mutableStateOf(false) }
 
@@ -210,6 +223,7 @@ fun DrawerContent(fullscreen: Boolean) {
                     AddProjectSheet(
                         onDismiss = { showAddDialog = false },
                         openFolder = openFolder,
+                        openExternalFile = openExternalFile,
                         onAddProject = { fileObject -> scope.launch { viewModel.addFileTreeTab(fileObject, true) } },
                         showPrivateFileWarning = { callback ->
                             dialogRes(
