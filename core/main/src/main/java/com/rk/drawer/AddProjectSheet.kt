@@ -83,37 +83,28 @@ fun AddProjectSheet(
             )
 
             AddDialogItem(
-                icon = Icon.ResourceIcon(drawables.file),
-                title = "Open file (External App)",
-                description = "Pick a file using File Manager+ or external pickers",
-                onClick = {
-                    onDismiss()
-                    activity.fileManager.requestOpenFile("*/*") { uri ->
-                        uri?.let { safeUri ->
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                try {
-                                    // 1. Convert Uri to FileObject
-                                    val fileObject = safeUri.toFileObject(expectedIsFile = true)
-                                    
-                                    withContext(Dispatchers.Main) {
-                                        // 2. Open directly as an editor tab (or fallback to drawer)
-                                        activity.openFile(fileObject) 
-                                    }
-                                } catch (e: Exception) {
-                                    e.printStackTrace()
-                                    withContext(Dispatchers.Main) {
-                                        android.widget.Toast.makeText(
-                                            activity,
-                                            "Failed to load file: ${e.localizedMessage}",
-                                            android.widget.Toast.LENGTH_LONG
-                                        ).show()
+                            icon = Icon.ResourceIcon(drawables.file),
+                            title = "Open file (External App)",
+                            description = "Pick a file using File Manager+ or external pickers",
+                            onClick = {
+                                onDismiss()
+                                activity.fileManager.requestOpenFile("*/*") { uri ->
+                                    uri?.let { safeUri ->
+                                        lifecycleScope.launch(Dispatchers.IO) {
+                                            runCatching {
+                                                val fileObject = safeUri.toFileObject(expectedIsFile = true)
+                                                withContext(Dispatchers.Main) {
+                                                    viewModel.addFileTreeTab(fileObject)
+                                                }
+                                            }.onFailure { e ->
+                                                e.printStackTrace()
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
-                    }
-                },
-            )
+                            },
+                        )
+                        
             val is11Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val isManager = is11Plus && Environment.isExternalStorageManager()
             val legacyPermission =
