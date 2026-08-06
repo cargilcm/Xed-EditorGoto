@@ -1,13 +1,17 @@
 package com.rk.drawer
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
+import android.widget.Toast
 import androidx.activity.compose.ManagedActivityResultLauncher
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -55,8 +59,38 @@ fun AddProjectSheet(
     val context = LocalContext.current
     val activity = context as MainActivity
     val lifecycleScope = remember { activity.lifecycleScope }
-
     val viewModel = activity.drawerViewModel
+
+    // Safely captures the Uri from external pickers like File Manager+ across activity lifecycle pauses
+    val openFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val uri = result.data?.data
+            if (uri == null) {
+                Toast.makeText(context, "No file URI received", Toast.LENGTH_SHORT).show()
+                return@rememberLauncherForActivityResult
+            }
+
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val fileObject = uri.toFileObject(expectedIsFile = true)
+                    withContext(Dispatchers.Main) {
+                        onAddProject(fileObject)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            "Failed to open file: ${e.localizedMessage}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -83,42 +117,20 @@ fun AddProjectSheet(
             )
 
             AddDialogItem(
-                                        icon = Icon.ResourceIcon(drawables.file),
-                                        title = "Open file (External App)",
-                                        description = "Pick a file using File Manager+ or external pickers",
-                                        onClick = {
-                                            onDismiss()
-                                            activity.fileManager.requestOpenFile("*/*") { uri ->
-                                                if (uri == null) {
-                                                    // Uri was null or user cancelled
-                                                    android.widget.Toast.makeText(
-                                                        activity,
-                                                        "No file selected (Uri was null)",
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                    ).show()
-                                                    return@requestOpenFile
-                                                }
-                        
-                                                lifecycleScope.launch(Dispatchers.IO) {
-                                                    try {
-                                                        val fileObject = uri.toFileObject(expectedIsFile = true)
-                                                        withContext(Dispatchers.Main) {
-                                                            onAddProject(fileObject)
-                                                        }
-                                                    } catch (e: Exception) {
-                                                        e.printStackTrace()
-                                                        withContext(Dispatchers.Main) {
-                                                            android.widget.Toast.makeText(
-                                                                activity,
-                                                                "Error: ${e.localizedMessage}",
-                                                                android.widget.Toast.LENGTH_LONG
-                                                            ).show()
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        },
-                                    )            
+                icon = Icon.ResourceIcon(drawables.file),
+                title = "Open file (External App)",
+                description = "Pick a file using File Manager+ or external pickers",
+                onClick = {
+                    onDismiss()
+                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                    }
+                    val chooser = Intent.createChooser(intent, "Select File")
+                    openFileLauncher.launch(chooser)
+                },
+            )
+
             val is11Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val isManager = is11Plus && Environment.isExternalStorageManager()
             val legacyPermission =
@@ -244,7 +256,6 @@ fun AddProjectSheet(
                 }
             }
         }
-
     }
 }
 
