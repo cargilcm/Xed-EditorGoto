@@ -83,27 +83,37 @@ fun AddProjectSheet(
             )
 
             AddDialogItem(
-                            icon = Icon.ResourceIcon(drawables.file),
-                            title = "Open file (External App)",
-                            description = "Pick a file using File Manager+ or external pickers",
-                            onClick = {
-                                onDismiss()
-                                activity.fileManager.requestOpenFile("*/*") { uri ->
-                                    uri?.let { safeUri ->
-                                        lifecycleScope.launch(Dispatchers.IO) {
-                                            runCatching {
-                                                val fileObject = safeUri.toFileObject(expectedIsFile = true)
-                                                withContext(Dispatchers.Main) {
-                                                    viewModel.addFileTreeTab(fileObject)
+                                        icon = Icon.ResourceIcon(drawables.file),
+                                        title = "Open file (External App)",
+                                        description = "Pick a file using File Manager+ or external pickers",
+                                        onClick = {
+                                            onDismiss()
+                                            activity.fileManager.requestOpenFile("*/*") { uri ->
+                                                uri?.let { safeUri ->
+                                                    lifecycleScope.launch(Dispatchers.IO) {
+                                                        try {
+                                                            // 1. Wrap URI into FileObject
+                                                            val fileObject = safeUri.toFileObject(expectedIsFile = true)
+                                                            
+                                                            // 2. Dispatch directly to host callback to populate UI
+                                                            withContext(Dispatchers.Main) {
+                                                                onAddProject(fileObject)
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            e.printStackTrace()
+                                                            withContext(Dispatchers.Main) {
+                                                                android.widget.Toast.makeText(
+                                                                    context,
+                                                                    "Failed to open file: ${e.localizedMessage}",
+                                                                    android.widget.Toast.LENGTH_SHORT
+                                                                ).show()
+                                                            }
+                                                        }
+                                                    }
                                                 }
-                                            }.onFailure { e ->
-                                                e.printStackTrace()
                                             }
-                                        }
-                                    }
-                                }
-                            },
-                        )
+                                        },
+                                    )
                         
             val is11Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val isManager = is11Plus && Environment.isExternalStorageManager()
