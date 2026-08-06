@@ -89,32 +89,36 @@ fun AddProjectSheet(
                                         onClick = {
                                             onDismiss()
                                             activity.fileManager.requestOpenFile("*/*") { uri ->
-                                                uri?.let { safeUri ->
-                                                    lifecycleScope.launch(Dispatchers.IO) {
-                                                        try {
-                                                            // 1. Wrap URI into FileObject
-                                                            val fileObject = safeUri.toFileObject(expectedIsFile = true)
-                                                            
-                                                            // 2. Dispatch directly to host callback to populate UI
-                                                            withContext(Dispatchers.Main) {
-                                                                onAddProject(fileObject)
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            e.printStackTrace()
-                                                            withContext(Dispatchers.Main) {
-                                                                android.widget.Toast.makeText(
-                                                                    context,
-                                                                    "Failed to open file: ${e.localizedMessage}",
-                                                                    android.widget.Toast.LENGTH_SHORT
-                                                                ).show()
-                                                            }
+                                                if (uri == null) {
+                                                    // Uri was null or user cancelled
+                                                    android.widget.Toast.makeText(
+                                                        activity,
+                                                        "No file selected (Uri was null)",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    return@requestOpenFile
+                                                }
+                        
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    try {
+                                                        val fileObject = uri.toFileObject(expectedIsFile = true)
+                                                        withContext(Dispatchers.Main) {
+                                                            onAddProject(fileObject)
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        e.printStackTrace()
+                                                        withContext(Dispatchers.Main) {
+                                                            android.widget.Toast.makeText(
+                                                                activity,
+                                                                "Error: ${e.localizedMessage}",
+                                                                android.widget.Toast.LENGTH_LONG
+                                                            ).show()
                                                         }
                                                     }
                                                 }
                                             }
                                         },
-                                    )
-                        
+                                    )            
             val is11Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val isManager = is11Plus && Environment.isExternalStorageManager()
             val legacyPermission =
