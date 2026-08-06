@@ -86,27 +86,37 @@ fun DrawerContent(fullscreen: Boolean) {
         )
 
     val openExternalFile =
-        rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.StartActivityForResult(),
-            onResult = { result ->
-                if (result.resultCode == Activity.RESULT_OK) {
-                    val uri = result.data?.data
-                    uri?.let { safeUri ->
-                        runCatching {
-                            context.contentResolver.takePersistableUriPermission(
-                                safeUri,
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                            )
-                        }.onFailure { e -> e.printStackTrace() }
+    rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val uri = result.data?.data
+                if (uri == null) {
+                    android.widget.Toast.makeText(context, "No file selected", android.widget.Toast.LENGTH_SHORT).show()
+                    return@rememberLauncherForActivityResult
+                }
 
-                        scope.launch {
-                            viewModel.addFileTreeTab(safeUri.toFileObject(expectedIsFile = true), true)
-                        }
+                scope.launch {
+                    runCatching {
+                        // 1. Convert URI directly without attempting to persist permissions
+                        val fileObject = uri.toFileObject(expectedIsFile = true)
+                        viewModel.addFileTreeTab(fileObject, true)
+                    }.onSuccess {
+                        // 2. Close side drawer panel after successfully adding file
+                        mainActivity.closeDrawer()
+                    }.onFailure { e ->
+                        e.printStackTrace()
+                        android.widget.Toast.makeText(
+                            context,
+                            "Failed to load file: ${e.localizedMessage}",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
-            },
-        )
-
+            }
+        },
+    )
+    
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (viewModel.isLoading) {
             CircularProgressIndicator()
