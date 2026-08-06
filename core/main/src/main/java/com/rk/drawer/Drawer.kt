@@ -103,7 +103,7 @@ fun DrawerContent(fullscreen: Boolean) {
                         viewModel.addFileTreeTab(fileObject, true)
                     }.onSuccess {
                         // 2. Close side drawer panel after successfully adding file
-                        mainActivity.closeDrawer()
+                        //mainActivity.closeDrawer()
                     }.onFailure { e ->
                         e.printStackTrace()
                         android.widget.Toast.makeText(
