@@ -104,6 +104,7 @@ fun DrawerContent(fullscreen: Boolean) {
                     }.onSuccess {
                         // 2. Close side drawer panel after successfully adding file
                         //mainActivity.closeDrawer()
+                        
                     }.onFailure { e ->
                         e.printStackTrace()
                         android.widget.Toast.makeText(
