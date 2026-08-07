@@ -92,43 +92,43 @@ fun DrawerContent(fullscreen: Boolean) {
         )
 
     val openExternalFile =
-            rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.StartActivityForResult(),
-                onResult = { result ->
-                    if (result.resultCode == Activity.RESULT_OK) {
-                        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
-        
-                        scope.launch {
-                            runCatching {
-                                val fileObject = uri.toFileObject(expectedIsFile = true)
-                                val charset = Charset.forName(Settings.encoding)
-        
-                                val content = withContext(Dispatchers.IO) {
-                                    fileObject.getInputStream().use { stream ->
-                                        ContentIO.createFrom(stream, charset)
+                rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartActivityForResult(),
+                    onResult = { result ->
+                        if (result.resultCode == Activity.RESULT_OK) {
+                            val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+            
+                            scope.launch {
+                                runCatching {
+                                    val fileObject = uri.toFileObject(expectedIsFile = true)
+                                    val charset = Charset.forName(Settings.encoding)
+            
+                                    val content: io.github.rosemoe.sora.text.Content = withContext(Dispatchers.IO) {
+                                        fileObject.getInputStream().use { stream ->
+                                            ContentIO.createFrom(stream, charset)
+                                        }
                                     }
+            
+                                    val editorTab = EditorTab(
+                                        file = fileObject,
+                                        projectRoot = null,
+                                        viewModel = mainActivity.viewModel,
+                                        initialContent = content,
+                                    )
+            
+                                    mainActivity.viewModel.addTab(editorTab)
+                                }.onFailure { e ->
+                                    e.printStackTrace()
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Failed to load file: ${e.localizedMessage}",
+                                        android.widget.Toast.LENGTH_LONG,
+                                    ).show()
                                 }
-        
-                                val editorTab = EditorTab(
-                                    file = fileObject,
-                                    projectRoot = null,
-                                    viewModel = viewModel,
-                                    initialContent = content,
-                                )
-        
-                                mainActivity.tabViewModel.addTab(editorTab)
-                            }.onFailure { e ->
-                                e.printStackTrace()
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Failed to load file: ${e.localizedMessage}",
-                                    android.widget.Toast.LENGTH_LONG,
-                                ).show()
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
         
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (viewModel.isLoading) {
