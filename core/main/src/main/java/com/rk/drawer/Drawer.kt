@@ -92,37 +92,35 @@ fun DrawerContent(fullscreen: Boolean) {
             },
         )
 
-    val openExternalFile =
-            rememberLauncherForActivityResult(
-                contract = ActivityResultContracts.StartActivityForResult(),
-                onResult = { result ->
-                    if (result.resultCode == Activity.RESULT_OK) {
-                        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
-        
-                        scope.launch {
-                            runCatching {
-                                val fileObject = uri.toFileObject(expectedIsFile = true)
-                                
-                                // Delegates reading, ContentIO stream parsing, and tab addition 
-                                // matching MainActivity.handleIntent semantics
-                                mainActivity.viewModel.editorManager.openFile(
-                                    file = fileObject,
-                                    projectRoot = null,
-                                    switchToTab = true,
-                                )
-                            }.onFailure { e ->
-                                e.printStackTrace()
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "Failed to load file: ${e.localizedMessage}",
-                                    android.widget.Toast.LENGTH_LONG,
-                                ).show()
-                            }
-                        }
-                    }
-                },
-            )
+val openExternalFile =
+    rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val uri = result.data?.data ?: return@rememberLauncherForActivityResult
 
+                scope.launch {
+                    runCatching {
+                        val fileObject = uri.toFileObject(expectedIsFile = true)
+
+                        mainActivity.viewModel.editorManager.openFile(
+                            fileObject = fileObject,
+                            projectRoot = null,
+                            switchToTab = true,
+                        )
+                    }.onFailure { e ->
+                        e.printStackTrace()
+                        android.widget.Toast.makeText(
+                            context,
+                            "Failed to load file: ${e.localizedMessage}",
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+        },
+    )
+    
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (viewModel.isLoading) {
             CircularProgressIndicator()
