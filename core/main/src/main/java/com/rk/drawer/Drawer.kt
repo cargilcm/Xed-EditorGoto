@@ -1,13 +1,8 @@
 package com.rk.drawer
 
-import com.rk.settings.Settings
-import com.rk.tabs.editor.EditorTab
-import io.github.rosemoe.sora.text.ContentIO
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.nio.charset.Charset
 import android.app.Activity
 import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -63,8 +58,14 @@ import com.rk.icons.XedIcon
 import com.rk.resources.drawables
 import com.rk.resources.getString
 import com.rk.resources.strings
+import com.rk.settings.Settings
 import com.rk.utils.dialogRes
+import io.github.rosemoe.sora.text.Content
+import io.github.rosemoe.sora.text.ContentIO
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.nio.charset.Charset
 
 @Composable
 fun DrawerContent(fullscreen: Boolean) {
@@ -92,44 +93,39 @@ fun DrawerContent(fullscreen: Boolean) {
         )
 
     val openExternalFile =
-                rememberLauncherForActivityResult(
-                    contract = ActivityResultContracts.StartActivityForResult(),
-                    onResult = { result ->
-                        if (result.resultCode == Activity.RESULT_OK) {
-                            val uri = result.data?.data ?: return@rememberLauncherForActivityResult
-            
-                            scope.launch {
-                                runCatching {
-                                    val fileObject = uri.toFileObject(expectedIsFile = true)
-                                    val charset = Charset.forName(Settings.encoding)
-            
-                                    val content: io.github.rosemoe.sora.text.Content = withContext(Dispatchers.IO) {
-                                        fileObject.getInputStream().use { stream ->
-                                            ContentIO.createFrom(stream, charset)
-                                        }
-                                    }
-            
-                                    val editorTab = EditorTab(
-                                        file = fileObject,
-                                        projectRoot = null,
-                                        viewModel = mainActivity.viewModel,
-                                        initialContent = content,
-                                    )
-            
-                                    mainActivity.viewModel.addTab(editorTab)
-                                }.onFailure { e ->
-                                    e.printStackTrace()
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Failed to load file: ${e.localizedMessage}",
-                                        android.widget.Toast.LENGTH_LONG,
-                                    ).show()
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult(),
+            onResult = { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+
+                    scope.launch {
+                        runCatching {
+                            val fileObject = uri.toFileObject(expectedIsFile = true)
+                            val charset = Charset.forName(Settings.encoding)
+
+                            // Type parameter explicitly defined on withContext<Content>
+                            val content = withContext<Content>(Dispatchers.IO) {
+                                fileObject.getInputStream().use { stream ->
+                                    ContentIO.createFrom(stream, charset)
                                 }
                             }
+
+                            // Pass the file directly to DrawerViewModel to open as single-file tab
+                            viewModel.addFileTreeTab(fileObject, true)
+                        }.onFailure { e ->
+                            e.printStackTrace()
+                            Toast.makeText(
+                                context,
+                                "Failed to load file: ${e.localizedMessage}",
+                                Toast.LENGTH_LONG,
+                            ).show()
                         }
-                    },
-                )
-        
+                    }
+                }
+            },
+        )
+
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (viewModel.isLoading) {
             CircularProgressIndicator()
