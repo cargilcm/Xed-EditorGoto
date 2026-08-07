@@ -87,38 +87,47 @@ fun DrawerContent(fullscreen: Boolean) {
         )
 
     val openExternalFile =
-    rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult(),
-        onResult = { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val uri = result.data?.data
-                if (uri == null) {
-                    android.widget.Toast.makeText(context, "No file selected", android.widget.Toast.LENGTH_SHORT).show()
-                    return@rememberLauncherForActivityResult
-                }
-
-                scope.launch {
-                    runCatching {
-                        // 1. Convert URI directly without attempting to persist permissions
-                        val fileObject = uri.toFileObject(expectedIsFile = true)
-                        viewModel.addFileTreeTab(fileObject, true)
-                    }.onSuccess {
-                        // 2. Close side drawer panel after successfully adding file
-                        //mainActivity.closeDrawer()
-                        
-                    }.onFailure { e ->
-                        e.printStackTrace()
-                        android.widget.Toast.makeText(
-                            context,
-                            "Failed to load file: ${e.localizedMessage}",
-                            android.widget.Toast.LENGTH_LONG
-                        ).show()
+        rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult(),
+            onResult = { result ->
+                if (result.resultCode == Activity.RESULT_OK) {
+                    val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+    
+                    scope.launch {
+                        runCatching {
+                            val fileObject = uri.toFileObject(expectedIsFile = true)
+                            val charset = Charset.forName(Settings.encoding)
+    
+                            // 1. Read raw stream using EditorTab's ContentIO semantics
+                            val content = withContext(Dispatchers.IO) {
+                                fileObject.getInputStream().use { stream ->
+                                    ContentIO.createFrom(stream, charset)
+                                }
+                            }
+    
+                            // 2. Instantiate EditorTab with pre-loaded content
+                            val editorTab = EditorTab(
+                                file = fileObject,
+                                projectRoot = null,
+                                viewModel = viewModel,
+                                initialContent = content,
+                            )
+    
+                            // 3. Add to workspace
+                            viewModel.addTab(editorTab)
+                        }.onFailure { e ->
+                            e.printStackTrace()
+                            android.widget.Toast.makeText(
+                                context,
+                                "Failed to load file: ${e.localizedMessage}",
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                        }
                     }
                 }
-            }
-        },
-    )
-    
+            },
+        )
+        
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (viewModel.isLoading) {
             CircularProgressIndicator()
